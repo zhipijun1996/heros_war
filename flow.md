@@ -82,60 +82,125 @@ graph TD
 
 ```mermaid
 graph TD
-    StartAction([玩家执行行动]) --> ActionType{操作分类}
+    StartAction([进入行动轮次]) --> SelSpAction{选择操作分类}
 
-    %% =========== 弃牌分支 ===========
-    ActionType -- "弃牌行动" --> DiscardChoice{选择触发哪种特殊效果}
-    DiscardChoice --> OpenChest[开启宝箱: 需在宝箱格, 获装备并在该格放0时间指示物]
-    DiscardChoice --> EarlyBuy[提前购买/招募]
-    DiscardChoice --> StealInit[抢先手: 喊抢先手, 下回合首位行动]
-    DiscardChoice --> Recruit[招募雇佣兵: 支付≥2金币, X-2经验降生于王城]
-
-    %% =========== 打牌分支 ===========
-    ActionType -- "打牌行动" --> PlayChoice{行动卡类型}
-    PlayChoice --> MoveCard[移动卡: 移动距离 <= 英雄移动力]
-    PlayChoice --> TacticCard[战术卡: 强化/机动/控制等结算]
-    PlayChoice --> AttackCard[攻击卡/技能卡]
-
-    AttackCard --> ChooseTarget[选择攻击范围内的目标]
+    %% ================= 通用效果分支 =================
+    SelSpAction -- "通用动作 (弃1张牌)" --> SysCheck[系统后台: 遍历5种通用动作的前提条件]
     
-    %% =========== 战斗与结算核心逻辑 ===========
-    subgraph 战斗与伤害状态机
-        ChooseTarget --> TargetType{目标是什么?}
+    SysCheck --> ConditionFilter{过滤不满足条件的选项}
+    ConditionFilter --> ShowValid[前端: 仅展示合法的通用选项]
 
-        %% 1. 攻击王城
-        TargetType -- "敌方王城" --> HitBase[王城HP -1]
-        HitBase --> BaseCounter[王城触发反击: 对攻击者造成1伤]
+    ShowValid --> CommonChoice{玩家选择具体通用动作}
+    CommonChoice -- "开启宝箱 (需在宝箱格)" --> OpenChest[执行开启宝箱]
+    CommonChoice -- "提前购买 (需有金币)" --> EarlyBuy[执行购买/招募]
+    CommonChoice -- "抢先手 (需本回合未被抢)" --> StealInit[执行抢先手]
+    CommonChoice -- "招募英雄 (需金币≥2)" --> Recruit[执行招募]
+    CommonChoice -- "进化英雄 (需满足升级经验)" --> Evolve[执行进化流程]
 
-        %% 2. 攻击怪物
-        TargetType -- "地图怪物" --> MonsterCounterLogic{怪物是否被本次攻击击败?}
-        MonsterCounterLogic -- "是" --> MonsterDie[击败怪物: 获得对应等级 EXP/GOLD]
-        MonsterDie --> TimeToken[原地放置0时间指示物]
-        MonsterCounterLogic -- "否" --> MonsterCounter[触发怪物反击: 对攻击者造成伤害]
+    %% ================= 牌面效果分支 =================
+    SelSpAction -- "牌面效果 (打出1张牌)" --> SelectCard[玩家选中一张手牌]
+    
+    SelectCard --> CardType{系统识别卡牌类型共6种}
 
-        %% 3. 攻击英雄
-        TargetType -- "敌方英雄" --> DefendLogic{防守方是否打出防御卡?}
-        DefendLogic -- "是: 打出[防御]" --> Block[攻击被格挡, 失败不结算]
-        DefendLogic -- "是: 打出[反击]" --> HeroCounter[原攻击正常结算, 随后防守方进行反击]
-        DefendLogic -- "否" --> HeroTakeDmg[防守方承受伤害]
+    CardType -- "1. 防御卡" --> Invalid[提示无效: 该卡只能在受击时或作为通用弃牌使用]
+    
+    CardType -- "2. 行动卡" --> ActionCardChoice{选择行动卡功能}
+    ActionCardChoice -- "移动" --> MoveFlow[进入移动流程]
+    ActionCardChoice -- "攻击" --> AttackFlow[[调用: 攻击流程]]
+    ActionCardChoice -- "技能" --> SkillFlow[进入技能流程]
 
-        HeroCounter --> HeroTakeDmg
-        BaseCounter --> AttackerTakeDmg[攻击方承受伤害]
-        MonsterCounter --> AttackerTakeDmg
+    CardType -- "3. 冲刺卡" --> DashFlow[执行冲刺效果]
+    CardType -- "4. 强击卡" --> HeavyFlow[执行强击效果]
+    CardType -- "5. 间谍卡" --> SpyFlow[执行间谍效果]
+    CardType -- "6. 回复卡" --> HealFlow[执行回复效果]
+```    
 
-        %% 伤害与阵亡判定
-        HeroTakeDmg --> AddDmgToken[英雄放置受伤指示物]
-        AttackerTakeDmg --> AddDmgToken
-        AddDmgToken --> CheckDeath{当前受伤指示物 ≥ 英雄最大HP?}
-        
-        CheckDeath -- "否" --> Survive[存活: 战斗结算结束]
-        CheckDeath -- "是" --> HeroDie[阵亡: 移除模型与受伤指示物]
-        HeroDie --> DeathToken[在英雄卡上放置0时间指示物用于复活]
-        
-        %% 经验结算
-        MonsterDie --> ExpCheck{英雄是否满级Lv3?}
-        ExpCheck -- "否" --> GainExp[英雄增加经验 -> 检查是否达标升级]
-        GainExp --> LevelUp[升级: 替换高级卡牌/模型, 移除1个受伤指示物]
-        ExpCheck -- "是" --> ExpToGold[经验溢出: 自动转化为金币]
-    end
+```mermaid
+graph TD
+    StartAttack([开始攻击]) --> SelectHero[玩家选择本轮执行攻击的英雄]
+    SelectHero --> HighLight[系统高亮攻击范围内合法目标]
+    HighLight --> SelectTarget[玩家点击选定目标]
+
+    SelectTarget --> TargetType{目标类型}
+
+    %% --------- 攻击英雄 ---------
+    TargetType -- "敌方英雄" --> DefendLogic{防守方响应}
+    DefendLogic -- "打出防御" --> Block[攻击格挡: 流程结束]
+    DefendLogic -- "打出反击" --> HeroCounter[准备反击逻辑]
+    DefendLogic -- "不响应" --> NormalHit[准备受击]
+
+    NormalHit --> Res1[[攻击结算流程: 目标为防守方]]
+    HeroCounter --> Res2[[攻击结算流程: 目标为防守方]]
+    
+    Res2 --> CheckCounterDeath{防守方存活?}
+    CheckCounterDeath -- "是" --> ExecCounter[[攻击结算流程: 目标为原攻击方]]
+    CheckCounterDeath -- "否" --> CounterFail[防守方阵亡: 反击失效]
+
+    %% --------- 攻击王城 ---------
+    TargetType -- "敌方王城" --> ResBase[[攻击结算流程: 目标为王城]]
+    ResBase --> CheckGameEnd{游戏结束?}
+    CheckGameEnd -- "否" --> BaseCounter[[攻击结算流程: 目标为攻击方]]
+
+    %% --------- 攻击怪物 ---------
+    TargetType -- "地图怪物" --> ResMonster[[攻击结算流程: 目标为怪物]]
+    ResMonster --> CheckMonsterDie{怪物阵亡?}
+    CheckMonsterDie -- "否" --> MonsterCounter[[攻击结算流程: 目标为攻击方]]
+    CheckMonsterDie -- "是" --> GainExp[英雄获得经验与金币]
+
+    %% --------- 经验计算与转换 ---------
+    GainExp --> ExpCalc{总经验值是否达到上限?}
+    ExpCalc -- "是" --> ExpToGold[溢出部分转化为金币]
+    ExpCalc -- "否" --> AddExp[累计英雄当前经验]
+    
+    %% --------- 汇合结束 ---------
+    Block --> AttackEnd
+    Res1 --> AttackEnd
+    ExecCounter --> AttackEnd
+    CounterFail --> AttackEnd
+    CheckGameEnd -- "是" --> AttackEnd
+    BaseCounter --> AttackEnd
+    MonsterCounter --> AttackEnd
+    ExpToGold --> AttackEnd
+    AddExp --> AttackEnd
+
+    AttackEnd([攻击流程结束])
+```    
+
+```mermaid
+graph TD
+    StartRes([开始结算]) --> Input[接收参数: 受击目标, 伤害值]
+    Input --> ApplyDmg[目标放置对应数量的伤害计数器]
+    
+    ApplyDmg --> CheckStatus{伤害计数器 >= 目标HP?}
+    
+    CheckStatus -- "否" --> ResFinish([结算完成])
+    
+    CheckStatus -- "是" --> CallDeath[[阵亡结算流程]]
+    
+    CallDeath --> ResFinish
 ```
+
+```mermaid
+graph TD
+    StartDeath([进入阵亡结算]) --> IdentifyType{受击目标类型}
+
+    %% --- 英雄阵亡 ---
+    IdentifyType -- "英雄" --> HeroProcess[从地图移除该英雄模型]
+    HeroProcess --> ClearDmg[移除该英雄卡上的受伤计数器]
+    HeroProcess --> SetRespawn[在英雄卡上放置 0 时间标记]
+    SetRespawn --> DeathDone
+
+    %% --- 怪物阵亡 ---
+    IdentifyType -- "怪物" --> MonsterProcess[从地图移除该怪物标记]
+    MonsterProcess --> DropReward[当前攻击英雄获得对应经验与金币]
+    DropReward --> SetRefresh[在格子上放置 0 时间标记]
+    SetRefresh --> DeathDone
+
+    %% --- 王城被毁 ---
+    IdentifyType -- "王城" --> BaseProcess[标记该阵营王城被摧毁]
+    BaseProcess --> GameEnd[触发游戏结束判定]
+    GameEnd --> DeathDone
+
+    DeathDone([阵亡结算完成]) 
+```    
+
