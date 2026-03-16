@@ -7,16 +7,16 @@ graph TD
         PlaceMap --> DealHeroes[发英雄卡: 2人发4张/4人发3张]
         DealHeroes --> SelectHero[每位玩家选择1名初始英雄进入队伍]
         SelectHero --> Pool[未选中英雄进入公共雇佣区]
-        Pool --> DealCards[每位玩家发放4张初始手牌]
+        Pool --> DealCards[每位玩家发放3张初始手牌]
     end
 
     DealCards --> RoundLoop((进入大回合循环))
 
     RoundLoop --> MainRound[执行大回合各个阶段]
-    MainRound --> CheckWin{检查胜利条件: 任意王城HP为0?}
+    MainRound --> CheckWin{检查胜利条件: 任意王城HP为0?任意玩家声望为15？}
     
-    CheckWin -- "是 (单方摧毁)" --> Winner[摧毁方获得胜利]
-    CheckWin -- "是 (同时摧毁)" --> Draw[平局]
+    CheckWin -- "是 (单方）" --> Winner[单方获得胜利]
+    CheckWin -- "是 (同时)" --> Draw[平局]
     Winner --> End([游戏结束, 重新准备])
     Draw --> End
     
