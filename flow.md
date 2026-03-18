@@ -5,7 +5,7 @@ graph TD
     subgraph 游戏准备
         Setup --> PlaceMap[放置六角地图与预设标记]
         PlaceMap --> DealHeroes[发英雄卡: 2人发4张/4人发3张]
-        DealHeroes --> SelectHero[每位玩家选择1名初始英雄进入队伍]
+        DealHeroes --> SelectHero[每位玩家选择2名初始英雄进入队伍，并分别选择出生的王城]
         SelectHero --> Pool[未选中英雄进入公共雇佣区]
         Pool --> DealCards[每位玩家发放3张初始手牌]
     end
