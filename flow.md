@@ -30,19 +30,22 @@ graph TD
     ActionPhase[一、 行动阶段] --> PlayerTurn[当前顺位玩家行动]
 
     subgraph 行动阶段圈_轮流交替
-        PlayerTurn[当前顺位玩家行动] --> ActionChoice{选择本轮次操作}
-        
-        ActionChoice -- "打出一张手牌" --> SelSpAction{选择牌面or通用效果}       
-        ActionChoice -- "PASS (跳过本轮)" --> PassTurn[保留手牌, 等待下轮]
+        PlayerTurn[当前顺位玩家行动] --> HeroTokenChoice[选择一个英雄行动token]
 
-        SelSpAction -- "牌面效果" --> PlayCard[消耗手牌执行行动]
-        SelSpAction -- "通用效果" --> CommonAct[执行卡牌行动通用效果]
+        HeroTokenChoice --> ActionChoice{选择对应英雄本轮次操作}
+        
+        ActionChoice -- "打出一张手牌，之后行动被卡牌加强" --> SelSpAction{选择行动}
+        ActionChoice -- "执行行动" --> SelSpAction    
+        ActionChoice -- "PASS (跳过本轮)" --> PassTurn[该token翻面]
+
+        SelSpAction -- "牌面效果" --> PlayCard[执行行动]
+        SelSpAction -- "通用效果" --> CommonAct[执行通用效果]
 
         PlayCard --> CheckAllPass
         CommonAct --> CheckAllPass
         PassTurn --> CheckAllPass
         
-        CheckAllPass{全员是否都连续选择PASS?}
+        CheckAllPass{全员是否所有行动token都翻面}
         CheckAllPass -- "否" --> NextPlayer[切换至下一顺位玩家]
         NextPlayer --> PlayerTurn
     end
@@ -50,7 +53,7 @@ graph TD
     CheckAllPass -- "是" --> SupplyPhase[二、 补给阶段]
 
     subgraph 补给与商店阶段
-        SupplyPhase --> DrawCards[每人抽牌: 数量 = 当前存活英雄数 + 1]
+        SupplyPhase --> DrawCards[每人抽牌: 数量 = 2]
         DrawCards --> CheckHand1{玩家1手牌数 > 5张?}
         DrawCards --> CheckHand2{玩家2手牌数 > 5张?}
         CheckHand1 -- "是" --> Drop1[玩家1弃牌直到剩5张]
@@ -73,7 +76,8 @@ graph TD
 
     subgraph 回合结束与自动结算
         EndPhase --> TimePlus[场上所有时间指示物数字 +1]
-        TimePlus --> CheckRespawn[检查时间指示物=1: 阵亡英雄在王城复活]
+        TimePlus --> HeroTokenReset[所有英雄行动token回到正面]
+        HeroTokenReset --> CheckRespawn[检查时间指示物=1: 阵亡英雄在王城复活]
         CheckRespawn --> CheckRefresh[检查时间指示物=3: 移除指示物, 刷新怪物/宝箱]
     end
 
@@ -85,7 +89,7 @@ graph TD
     StartAction([进入行动轮次]) --> SelSpAction{选择操作分类}
 
     %% ================= 通用效果分支 =================
-    SelSpAction -- "通用动作 (弃1张牌)" --> SysCheck[系统后台: 遍历5种通用动作的前提条件]
+    SelSpAction -- "通用动作" --> SysCheck[系统后台: 遍历4种通用动作的前提条件]
     
     SysCheck --> ConditionFilter{过滤不满足条件的选项}
     ConditionFilter --> ShowValid[前端: 仅展示合法的通用选项]
@@ -95,25 +99,26 @@ graph TD
     CommonChoice -- "提前购买 (需有金币)" --> EarlyBuy[执行购买/招募]
     CommonChoice -- "抢先手 (需本回合未被抢)" --> StealInit[执行抢先手]
     CommonChoice -- "招募英雄 (需金币≥2)" --> Recruit[执行招募]
-    CommonChoice -- "进化英雄 (需满足升级经验)" --> Evolve[执行进化流程]
 
     %% ================= 牌面效果分支 =================
-    SelSpAction -- "牌面效果 (打出1张牌)" --> SelectCard[玩家选中一张手牌]
+    SelSpAction -- "行动效果" --> SelectAction[玩家选则一个行动]
     
-    SelectCard --> CardType{系统识别卡牌类型共6种}
+    SelectAction --> CardType{选择打出手牌}
 
     CardType -- "1. 防御卡" --> Invalid[提示无效: 该卡只能在受击时或作为通用弃牌使用]
-    
-    CardType -- "2. 行动卡" --> ActionCardChoice{选择行动卡功能}
-    ActionCardChoice -- "移动" --> MoveFlow[进入移动流程]
-    ActionCardChoice -- "攻击" --> AttackFlow[[调用: 攻击流程]]
-    ActionCardChoice -- "技能" --> SkillFlow[进入技能流程]
+    CardType -- "2. 远攻卡" --> ARFlow[AR短暂+1] --> ActionCardChoice{选择行动}
+    CardType -- "3. 冲刺卡" --> DashFlow[MV短暂+1] --> ActionCardChoice
+    CardType -- "4. 强击卡" --> SAFlow[伤害短暂+1] --> ActionCardChoice
+    CardType -- "5. 间谍卡" --> SpyFlow[执行间谍效果] --> ActionCardChoice
+    CardType -- "6. 回复卡" --> HealFlow[执行回复效果] --> ActionCardChoice
+    CardType -- "7. 替身卡" --> HeroSelFlow[选择本次行动的英雄，并切换为新的英雄进行行动] --> ActionCardChoice
+    CardType -- "Pass" --> CardPassFlow[本地不打出增幅卡] --> ActionCardChoice
 
-    CardType -- "3. 冲刺卡" --> DashFlow[执行冲刺效果]
-    CardType -- "4. 强击卡" --> HeavyFlow[执行强击效果]
-    CardType -- "5. 间谍卡" --> SpyFlow[执行间谍效果]
-    CardType -- "6. 回复卡" --> HealFlow[执行回复效果]
-```    
+    ActionCardChoice -- "移动" --> MoveFlow[进入移动流程]
+    ActionCardChoice -- "攻击" --> AttackFlow[进入攻击流程]
+    ActionCardChoice -- "技能" --> SkillFlow[进入技能流程]
+    ActionCardChoice -- "进化英雄 (需满足升级经验)" --> Evolve[执行进化流程]
+```
 
 ```mermaid
 graph TD
